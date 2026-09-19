@@ -1,46 +1,64 @@
 import type { RegionStats } from "../api/types";
+import { formatTrend } from "../api/format";
+
+/**
+ * Рост числа обращений — негативный сигнал (красный),
+ * снижение — позитивный (зелёный).
+ */
+function trendClass(percent: number): string {
+  return percent >= 0 ? "text-red-600" : "text-green-600";
+}
 
 export default function RegionTable({ rows }: { rows: RegionStats[] }) {
   return (
-    <div className="rounded-lg bg-card border border-line overflow-hidden">
-      <div className="px-5 py-3 border-b border-line">
-        <h3 className="text-sm font-semibold text-white">
-          Статистика по регионам
-        </h3>
+    <div className="bg-white border border-line rounded-md">
+      <div className="px-4 py-3 border-b border-line">
+        <h2 className="section-label">Статистика по регионам</h2>
       </div>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-muted text-xs">
-            <th className="px-5 py-2 font-medium">Регион</th>
-            <th className="px-5 py-2 font-medium">Обращений</th>
-            <th className="px-5 py-2 font-medium">Топ-категория</th>
-            <th className="px-5 py-2 font-medium text-right">Тренд</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const up = r.trend_percent >= 0;
-            return (
-              <tr
-                key={r.region}
-                className="border-t border-line/60 hover:bg-line/10"
-              >
-                <td className="px-5 py-3 text-white font-medium">
-                  {r.region}
-                </td>
-                <td className="px-5 py-3 text-muted">{r.total}</td>
-                <td className="px-5 py-3 text-muted">{r.top_category}</td>
-                <td
-                  className="px-5 py-3 text-right font-medium"
-                  style={{ color: up ? "#F43F5E" : "#10B981" }}
-                >
-                  {up ? "▲" : "▼"} {Math.abs(r.trend_percent).toFixed(1)}%
-                </td>
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-8">Нет данных</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px]">
+            <thead>
+              <tr className="bg-gray-50 border-b border-line">
+                <th className="section-label text-left px-4 py-2">Регион</th>
+                <th className="section-label text-left px-4 py-2">Обращений</th>
+                <th className="section-label text-left px-4 py-2">
+                  Топ-категория
+                </th>
+                <th className="section-label text-right px-4 py-2">Тренд</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={r.region}
+                  className="border-b border-line-soft last:border-b-0 hover:bg-gray-50 transition-colors duration-150"
+                >
+                  <td className="px-4 py-2.5 text-sm text-gray-900">
+                    {r.region}
+                  </td>
+                  <td className="px-4 py-2.5 text-sm text-gray-900 tabular-nums">
+                    {r.total}
+                  </td>
+                  <td className="px-4 py-2.5 text-sm text-gray-500">
+                    {r.top_category}
+                  </td>
+                  <td
+                    className={`px-4 py-2.5 text-xs font-medium text-right tabular-nums ${trendClass(
+                      r.trend_percent
+                    )}`}
+                  >
+                    {formatTrend(r.trend_percent)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import type { Ticket } from "../api/types";
-import { formatTime, priorityColor } from "../api/format";
+import { formatTime, priorityColor, priorityLabel } from "../api/format";
 
 interface Props {
   ticket: Ticket;
@@ -11,30 +11,29 @@ export default function TicketCard({ ticket, active, onClick }: Props) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+      aria-current={active ? "true" : undefined}
+      className={`w-full text-left pr-4 py-3 border-b border-line-soft transition-colors duration-150 ${
         active
-          ? "border-accent bg-accent/10"
-          : "border-line bg-card hover:border-line/80 hover:bg-line/20"
+          ? "bg-accent-light border-l-2 border-l-accent pl-[14px]"
+          : "bg-white hover:bg-gray-50 pl-4"
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2.5">
         <span
-          className="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0"
+          className="mt-[5px] w-2 h-2 rounded-full shrink-0"
           style={{ backgroundColor: priorityColor[ticket.priority] }}
-          title={ticket.priority}
+          title={`Приоритет: ${priorityLabel[ticket.priority]}`}
         />
         <div className="min-w-0 flex-1">
-          <p className="text-sm text-white line-clamp-2 leading-snug">
+          <p className="text-sm text-gray-900 line-clamp-2 leading-snug">
             {ticket.text}
           </p>
-          <div className="mt-2 flex items-center gap-2 text-xs text-muted">
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-gray-400">
             <span>{formatTime(ticket.created_at)}</span>
-            <span className="text-line">·</span>
-            <span className="px-1.5 py-0.5 rounded bg-line/40 text-muted">
-              {ticket.source}
-            </span>
-            <span className="text-line">·</span>
-            <span>{ticket.region}</span>
+            <span aria-hidden="true">·</span>
+            <span>{ticket.source}</span>
+            <span aria-hidden="true">·</span>
+            <span className="truncate">{ticket.region}</span>
           </div>
         </div>
       </div>

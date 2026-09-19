@@ -4,18 +4,34 @@ export default {
   theme: {
     extend: {
       colors: {
-        base: "#0F172A",
-        card: "#1E293B",
-        line: "#334155",
-        muted: "#CBD5E1",
-        accent: "#6366F1",
-        ai: "#8B5CF6",
-        ok: "#10B981",
-        warn: "#F59E0B",
-        danger: "#F43F5E",
+        // Поверхности
+        page: "#F9FAFB",
+        card: "#FFFFFF",
+        sidebar: "#FFFFFF",
+        // Бордеры
+        line: "#E5E7EB",
+        "line-soft": "#F3F4F6",
+        // Единственный акцент
+        accent: {
+          DEFAULT: "#2563EB",
+          hover: "#1D4ED8",
+          light: "#EFF6FF",
+        },
       },
       fontFamily: {
-        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        sans: [
+          "Inter",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "sans-serif",
+        ],
+      },
+      borderRadius: {
+        DEFAULT: "0.375rem",
+      },
+      transitionDuration: {
+        DEFAULT: "150ms",
       },
     },
   },

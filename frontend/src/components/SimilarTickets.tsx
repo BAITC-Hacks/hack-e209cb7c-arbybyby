@@ -2,25 +2,26 @@ import type { SimilarTicket } from "../api/types";
 
 export default function SimilarTickets({ items }: { items: SimilarTicket[] }) {
   if (!items.length) {
-    return <p className="text-sm text-muted">Похожих обращений не найдено.</p>;
+    return (
+      <p className="text-sm text-gray-400 py-2">Похожих обращений не найдено</p>
+    );
   }
 
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
+    <ul>
       {items.map((s) => (
-        <div
+        <li
           key={s.id}
-          className="rounded-lg border border-line bg-base/50 p-3 flex flex-col gap-2"
+          className="flex items-center gap-3 py-2 border-b border-line-soft last:border-b-0"
         >
-          <p className="text-xs text-muted line-clamp-3 leading-snug">{s.text}</p>
-          <div className="flex items-center justify-between mt-auto">
-            <span className="text-[11px] text-muted">{s.category}</span>
-            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded bg-ai/20 text-ai">
-              {s.similarity_score}% схожесть
-            </span>
-          </div>
-        </div>
+          <span className="text-sm text-gray-600 truncate flex-1 min-w-0">
+            {s.text}
+          </span>
+          <span className="text-xs text-gray-400 shrink-0 tabular-nums">
+            {s.similarity_score}%
+          </span>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

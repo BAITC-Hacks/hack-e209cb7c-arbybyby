@@ -8,20 +8,38 @@
   #root {
     height: 100%;
   }
+
   body {
-    @apply bg-base text-white font-sans antialiased;
+    @apply bg-page text-gray-900 font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Единый фокус-ринг по всему интерфейсу */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/40 ring-offset-1 ring-offset-white;
   }
 }
 
-/* тонкий скроллбар для тёмной темы */
+@layer utilities {
+  /* Секционный заголовок: 12px, uppercase, tracking-wide */
+  .section-label {
+    @apply text-xs font-medium text-gray-400 uppercase tracking-wide;
+    letter-spacing: 0.05em;
+  }
+}
+
+/* Тонкий светлый скроллбар */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
 }
