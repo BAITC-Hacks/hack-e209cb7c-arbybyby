@@ -158,10 +158,25 @@ def _force_utf8_stdout() -> None:
 def main() -> int:
     _force_utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
+    parser.add_argument(
+        "--input", type=Path, nargs="+", default=[DEFAULT_INPUT],
+        help="один или несколько CSV из data/raw (склеиваются с дедупликацией по id)",
+    )
     args = parser.parse_args()
 
-    rows = list(csv.DictReader(args.input.open(encoding="utf-8-sig")))
+    rows: list[dict] = []
+    seen: set[str] = set()
+    for path in args.input:
+        if not path.exists():
+            print(f"пропускаю (нет файла): {path}")
+            continue
+        part = list(csv.DictReader(path.open(encoding="utf-8-sig")))
+        fresh = [r for r in part if r["id"] not in seen]
+        seen.update(r["id"] for r in fresh)
+        rows.extend(fresh)
+        print(f"  {path.name}: {len(part)} строк, новых {len(fresh)}")
+    print()
+
     labeled = build(rows)
 
     confident = [r for r in labeled if r.source == "both"]

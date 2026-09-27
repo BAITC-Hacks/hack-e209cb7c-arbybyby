@@ -100,6 +100,36 @@ QUERIES: list[str] = [
     "көлік",
 ]
 
+# Целевые запросы: фразы вместо отдельных слов. Одиночное «су» находит любое
+# обращение, где это сочетание встретилось; «су жоқ» — жалобы на отсутствие воды.
+# Выдача по фразам короче в разы (6-67 страниц против 335-2467) и чище.
+QUERIES_FOCUSED: list[str] = [
+    # Водоснабжение и канализация
+    "прорвало трубу", "нет холодной воды", "нет горячей воды",
+    "затопило подвал", "канализация засор", "течет стояк",
+    "су жоқ", "су құбыры жарылды",
+    # Отопление
+    "нет отопления", "холодные батареи", "не топят",
+    "жылу жоқ", "пәтер суық",
+    # Освещение
+    "уличное освещение", "не горят фонари", "нет освещения во дворе",
+    "көше жарығы", "жарық жоқ",
+    # Дороги
+    "яма на дороге", "разбитая дорога", "нет асфальта",
+    "не работает светофор", "тротуар разбит",
+    "жол жөндеу", "жол бұзылған",
+    # Транспорт
+    "автобус не ходит", "нет расписания на остановке",
+    "водитель автобуса", "отменили маршрут",
+    "автобус жүрмейді", "қоғамдық көлік",
+    # Благоустройство
+    "не вывозят мусор", "мусорные контейнеры переполнены",
+    "стихийная свалка", "детская площадка сломана",
+    "қоқыс шығарылмайды",
+    # Лифт
+    "не работает лифт", "лифт сломан", "лифт жұмыс істемейді",
+]
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -558,8 +588,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--queries", nargs="+", default=QUERIES,
-        help="поисковые запросы (по умолчанию — встроенный список из 18 штук)",
+        "--queries", nargs="+", default=None,
+        help="явный список запросов (перекрывает --query-set)",
+    )
+    parser.add_argument(
+        "--query-set", choices=["broad", "focused", "all"], default="broad",
+        help="broad — 18 одиночных слов; focused — целевые фразы; all — оба списка",
     )
     parser.add_argument(
         "--max-pages", type=int, default=10,
@@ -612,8 +646,18 @@ def main(argv: list[str] | None = None) -> int:
         "Скрипт всё равно к нему обращается — убедитесь, что это осознанное решение."
     )
 
+    if args.queries:
+        queries = args.queries
+    elif args.query_set == "focused":
+        queries = QUERIES_FOCUSED
+    elif args.query_set == "all":
+        # dict.fromkeys сохраняет порядок и убирает повторы между списками
+        queries = list(dict.fromkeys(QUERIES + QUERIES_FOCUSED))
+    else:
+        queries = QUERIES
+
     started = time.time()
-    rows = scrape(args.queries, args.max_pages, tuple(args.delay))
+    rows = scrape(queries, args.max_pages, tuple(args.delay))
 
     # стабильный порядок: свежие сверху
     rows.sort(key=lambda r: (_year_of(r.date), r.date, r.id), reverse=True)
