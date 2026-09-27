@@ -1,0 +1,8 @@
+# Зависимости только для скриптов сбора данных.
+# Не пересекается с backend/requirements.txt — ставить в отдельное окружение:
+#   python -m venv .venv-data && .venv-data\Scripts\activate
+#   pip install -r data/scripts/requirements.txt
+
+requests==2.32.3
+beautifulsoup4==4.12.3
+lxml==5.3.0
