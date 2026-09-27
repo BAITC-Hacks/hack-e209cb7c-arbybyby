@@ -3,8 +3,10 @@ from collections import Counter, defaultdict
 
 from fastapi import APIRouter
 
-from models import AnalyticsSummary, RegionStats, Spike, TimelinePoint
+from models import AnalyticsSummary, AskRequest, RegionStats, Spike, TimelinePoint
 from services.anomaly import get_spikes
+from services.forecast import build_forecast
+from services.nlq import answer as answer_question
 from store import all_tickets
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -78,3 +80,15 @@ def timeline():
         TimelinePoint(day=d, ЖКХ=z, Дороги=r, Освещение=l)
         for d, z, r, l in zip(days, zhkh, roads, light)
     ]
+
+
+@router.get("/forecast")
+def forecast(months: int = 3):
+    """Прогноз нагрузки на 1-3 месяца вперёд."""
+    return build_forecast(months)
+
+
+@router.post("/ask")
+def ask(payload: AskRequest):
+    """Вопрос к данным на естественном языке."""
+    return answer_question(payload.question)

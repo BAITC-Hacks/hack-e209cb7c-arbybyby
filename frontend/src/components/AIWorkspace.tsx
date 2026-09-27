@@ -4,8 +4,13 @@ import {
   CheckIcon,
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
-import type { SimilarTicket, Ticket } from "../api/types";
-import { approveTicket, classifyTicket, fetchSimilar } from "../api/client";
+import type { CategoryOption, SimilarTicket, Ticket } from "../api/types";
+import {
+  approveTicket,
+  classifyTicket,
+  correctTicket,
+  fetchSimilar,
+} from "../api/client";
 import { priorityLabel, statusBadge, statusLabel } from "../api/format";
 import SimilarTickets from "./SimilarTickets";
 import Spinner from "./Spinner";
@@ -17,6 +22,16 @@ interface Props {
   /** Возврат к списку на узких экранах. */
   onBack?: () => void;
 }
+
+/** Полный справочник категорий — для ручной правки оператором. */
+const ALL_CATEGORIES = [
+  "ЖКХ",
+  "Дороги",
+  "Освещение",
+  "Транспорт",
+  "Благоустройство",
+  "Другое",
+];
 
 function Field({ label, value }: { label: string; value: string | null }) {
   return (
@@ -41,6 +56,8 @@ export default function AIWorkspace({ ticket, onResolved, onBack }: Props) {
   const [similar, setSimilar] = useState<SimilarTicket[]>([]);
   const [classifying, setClassifying] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const toast = useToast();
 
   // синхронизация при смене выбранного обращения
@@ -106,6 +123,32 @@ export default function AIWorkspace({ ticket, onResolved, onBack }: Props) {
     }
   };
 
+  /** Оператор выбрал категорию — вручную или из предложенных вариантов. */
+  const applyCategory = async (option: CategoryOption | string) => {
+    if (correcting) return;
+    const category = typeof option === "string" ? option : option.category;
+    setCorrecting(true);
+    setDropdownOpen(false);
+    try {
+      const updated = await correctTicket(current.id, category, current.category);
+      const merged: Ticket = { ...current, ...updated };
+      // подкатегорию и службу берём из выбранного варианта, если он их принёс
+      if (typeof option !== "string") {
+        merged.subcategory = option.subcategory;
+        merged.responsible_service = option.responsible_service;
+      }
+      merged.needs_review = false;
+      merged.alternatives = [];
+      setCurrent(merged);
+      onResolved(merged);
+      toast("Коррекция сохранена. Будет использована для дообучения модели.");
+    } catch {
+      toast("Не удалось сохранить коррекцию");
+    } finally {
+      setCorrecting(false);
+    }
+  };
+
   // ⌘/Ctrl + Enter — подтвердить и перенаправить
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -143,13 +186,19 @@ export default function AIWorkspace({ ticket, onResolved, onBack }: Props) {
               Обращение #{current.id}
             </h2>
           </div>
-          <span
-            className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
-              statusBadge[current.status]
-            }`}
-          >
-            {statusLabel[current.status]}
-          </span>
+          {current.needs_review ? (
+            <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded bg-amber-50 text-amber-700">
+              Требует проверки
+            </span>
+          ) : (
+            <span
+              className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded ${
+                statusBadge[current.status]
+              }`}
+            >
+              {statusLabel[current.status]}
+            </span>
+          )}
         </div>
 
         {/* Исходный текст */}
@@ -166,22 +215,90 @@ export default function AIWorkspace({ ticket, onResolved, onBack }: Props) {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="Категория" value={current.category} />
-                <Field label="Подкатегория" value={current.subcategory} />
-                <Field label="Адрес" value={current.address} />
-                <Field
-                  label="Ответственная служба"
-                  value={current.responsible_service}
-                />
-                <Field label="Приоритет" value={priorityLabel[current.priority]} />
-                <Field label="Источник" value={current.source} />
-              </div>
+              {current.needs_review && (current.alternatives?.length ?? 0) > 0 ? (
+                /* Уверенности мало — категорию выбирает оператор */
+                <div>
+                  <div className="text-xs text-gray-400 mb-2">
+                    Категория определена неуверенно. Выберите подходящую:
+                  </div>
+                  <div className="space-y-1.5">
+                    {current.alternatives?.map((option) => (
+                      <button
+                        key={`${option.category}-${option.subcategory}`}
+                        onClick={() => applyCategory(option)}
+                        disabled={correcting}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left bg-white border border-line rounded-md hover:bg-accent-light hover:border-accent disabled:opacity-50 transition-colors duration-150"
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-gray-900 truncate">
+                            {option.category} — {option.subcategory}
+                          </span>
+                          <span className="block text-xs text-gray-400 truncate">
+                            {option.responsible_service}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs text-gray-400 tabular-nums">
+                          {option.confidence}%
+                        </span>
+                      </button>
+                    ))}
+                  </div>
 
-              <p className="text-xs text-gray-400 mt-4">
-                Определено автоматически. Проверьте и скорректируйте при
-                необходимости.
-              </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    <Field label="Адрес" value={current.address} />
+                    <Field label="Приоритет" value={priorityLabel[current.priority]} />
+                    <Field label="Источник" value={current.source} />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs text-gray-400">Категория</span>
+                        <div className="relative">
+                          <button
+                            onClick={() => setDropdownOpen((v) => !v)}
+                            disabled={correcting}
+                            className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 disabled:opacity-50 transition-colors duration-150"
+                          >
+                            Исправить
+                          </button>
+                          {dropdownOpen && (
+                            <div className="absolute left-0 top-full mt-1 z-20 w-44 bg-white border border-line rounded-md shadow-sm py-1">
+                              {ALL_CATEGORIES.map((name) => (
+                                <button
+                                  key={name}
+                                  onClick={() => applyCategory(name)}
+                                  className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors duration-150"
+                                >
+                                  {name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {current.category || "—"}
+                      </div>
+                    </div>
+                    <Field label="Подкатегория" value={current.subcategory} />
+                    <Field label="Адрес" value={current.address} />
+                    <Field
+                      label="Ответственная служба"
+                      value={current.responsible_service}
+                    />
+                    <Field label="Приоритет" value={priorityLabel[current.priority]} />
+                    <Field label="Источник" value={current.source} />
+                  </div>
+
+                  <p className="text-xs text-gray-400 mt-4">
+                    Определено автоматически. Проверьте и скорректируйте при
+                    необходимости.
+                  </p>
+                </>
+              )}
 
               {/* Уверенность модели */}
               <div className="mt-4">

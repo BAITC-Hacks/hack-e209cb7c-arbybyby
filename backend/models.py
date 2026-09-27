@@ -23,6 +23,18 @@ class Ticket(BaseModel):
     responsible_service: Optional[str] = None
     confidence_score: Optional[int] = None
     reasoning: Optional[str] = None
+    needs_review: bool = False
+    alternatives: list["CategoryOption"] = []
+    # Гражданин идентифицируется только номером — ФИО в систему не попадают.
+    citizen_label: Optional[str] = None
+
+
+class CategoryOption(BaseModel):
+    """Вариант категории, предлагаемый оператору при низкой уверенности."""
+    category: str
+    subcategory: str
+    responsible_service: str
+    confidence: int
 
 
 class ClassifyResponse(BaseModel):
@@ -33,6 +45,21 @@ class ClassifyResponse(BaseModel):
     responsible_service: str
     confidence_score: int
     reasoning: str
+    # Классификатор не уверен: сработал один маркер либо текст слишком короткий.
+    # Оператор выбирает категорию сам из alternatives.
+    needs_review: bool = False
+    alternatives: list[CategoryOption] = []
+
+
+class AskRequest(BaseModel):
+    """Вопрос к данным на естественном языке."""
+    question: str
+
+
+class CorrectionRequest(BaseModel):
+    """Ручная правка категории оператором — сырьё для дообучения модели."""
+    original_category: Optional[str] = None
+    corrected_category: str
 
 
 class SimilarTicket(BaseModel):
@@ -69,3 +96,7 @@ class TimelinePoint(BaseModel):
     ЖКХ: int
     Дороги: int
     Освещение: int
+
+
+# CategoryOption объявлен ниже Ticket, поэтому ссылку в Ticket разрешаем явно.
+Ticket.model_rebuild()

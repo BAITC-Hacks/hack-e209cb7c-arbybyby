@@ -9,6 +9,20 @@ from data.seed import get_seed_data
 TICKETS: list[dict] = get_seed_data()
 
 
+# TODO: corrections dataset used for model retraining (feedback loop)
+# Каждая правка оператора — размеченный пример «модель ошиблась вот так».
+# В проде уезжает в отдельную таблицу и периодически вливается в обучающую выборку.
+CORRECTIONS: list[dict] = []
+
+
+def add_correction(entry: dict) -> None:
+    CORRECTIONS.append(entry)
+
+
+def all_corrections() -> list[dict]:
+    return CORRECTIONS
+
+
 def all_tickets() -> list[dict]:
     return TICKETS
 

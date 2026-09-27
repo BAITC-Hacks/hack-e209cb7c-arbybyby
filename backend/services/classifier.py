@@ -11,7 +11,7 @@ Placeholder-классификатор на основе поиска ключе
 import random
 import re
 
-from models import ClassifyResponse
+from models import CategoryOption, ClassifyResponse
 
 # Правила: (список маркеров) -> (категория, подкатегория, служба)
 #
@@ -107,6 +107,71 @@ def match_rules(text: str) -> tuple[tuple[str, str, str], list[str]] | None:
             return label, words
     return None
 
+def score_rules(text: str) -> list[tuple[tuple[str, str, str], list[str]]]:
+    """Все сработавшие правила, отсортированные по числу совпавших маркеров.
+
+    В отличие от match_rules (возвращает первое совпадение) нужен, чтобы
+    предложить оператору несколько вариантов, когда уверенности мало.
+    """
+    scored: list[tuple[tuple[str, str, str], list[str]]] = []
+    for pattern, label in _COMPILED_RULES:
+        words = [m.group(0) for m in pattern.finditer(text)]
+        if words:
+            scored.append((label, words))
+    scored.sort(key=lambda item: len(item[1]), reverse=True)
+    return scored
+
+
+# Чем добираем список вариантов, если правил сработало меньше трёх.
+# Порядок — по частоте категорий в реальном потоке обращений 109.
+_FALLBACK_OPTIONS: list[tuple[str, str, str]] = [
+    ("ЖКХ", "Водоснабжение", "Горводоканал"),
+    ("Дороги", "Дорожное покрытие", "УДС"),
+    ("Благоустройство", "Вывоз мусора", "УГХ"),
+    ("Освещение", "Уличное освещение", "Горсвет"),
+    ("Транспорт", "Общественный транспорт", "Управление транспорта"),
+]
+
+# Порог, ниже которого текст считается слишком коротким для уверенного вывода.
+# Казахские обращения вида «Су жоқ» (7 символов) попадают именно сюда.
+MIN_CONFIDENT_LENGTH = 20
+
+# Одиночный маркер сам по себе НЕ повод сомневаться: во фразе «канализацию
+# засорило, стоки во дворе» маркер один, но смысл однозначен. Считаем сигнал
+# слабым, только если при одном маркере текст ещё и короткий.
+# На seed-данных: порог 60 даёт ~15% обращений на проверку, без него — 60%,
+# и тогда классификатор выглядит бесполезным.
+SINGLE_MARKER_MAX_LENGTH = 60
+
+
+def build_alternatives(
+    scored: list[tuple[tuple[str, str, str], list[str]]],
+    top_confidence: int,
+) -> list[CategoryOption]:
+    """Три наиболее вероятные категории с убывающей уверенностью."""
+    options: list[tuple[str, str, str]] = [label for label, _ in scored]
+
+    for fallback in _FALLBACK_OPTIONS:
+        if len(options) >= 3:
+            break
+        if fallback not in options:
+            options.append(fallback)
+
+    result: list[CategoryOption] = []
+    for position, (category, subcategory, service) in enumerate(options[:3]):
+        # разносим уверенность: первый вариант вероятнее остальных
+        confidence = max(10, top_confidence - position * 15)
+        result.append(
+            CategoryOption(
+                category=category,
+                subcategory=subcategory,
+                responsible_service=service,
+                confidence=confidence,
+            )
+        )
+    return result
+
+
 # Маркеры высокого приоритета (аварийность, угроза, срочность).
 _HIGH_PRIORITY_MARKERS = [
     "срочно", "авари", "прорв", "жарыл", "хлещ", "фонтан", "кипяток", "затоп",
@@ -139,23 +204,43 @@ def _extract_address(text: str) -> str | None:
 def classify_ticket(text: str, address_hint: str | None = None) -> ClassifyResponse:
     """Классифицировать текст обращения. Возвращает ClassifyResponse."""
     text_lower = text.lower()
+    stripped = text.strip()
 
-    matched_words: list[str] = []
-    category = subcategory = service = None
+    scored = score_rules(text)
+    top_hits = scored[0][1] if scored else []
 
-    matched = match_rules(text)
-    if matched is not None:
-        (category, subcategory, service), matched_words = matched
+    # Уверенности мало, если зацепился ровно один маркер либо текста слишком мало.
+    # Второй случай важен для казахского: «Су жоқ» — валидная жалоба на воду,
+    # но семи символов недостаточно, чтобы отвечать за категорию.
+    too_short = len(stripped) < MIN_CONFIDENT_LENGTH
+    weak_single_marker = (
+        len(top_hits) <= 1 and len(stripped) < SINGLE_MARKER_MAX_LENGTH
+    )
+    needs_review = bool(scored) and (too_short or weak_single_marker)
 
-    if category is None:
+    if not scored:
         # ничего не совпало — отправляем в общую обработку акимата
         category, subcategory, service = "Другое", "Общие вопросы", "Акимат района"
         reasoning = "Явные маркеры не найдены — обращение направлено на ручную обработку."
         confidence = random.randint(55, 70)
+        needs_review = True
+        alternatives = build_alternatives([], confidence)
+    elif needs_review:
+        (category, subcategory, service) = scored[0][0]
+        confidence = random.randint(55, 70)
+        cause = (
+            f"текст короче {MIN_CONFIDENT_LENGTH} символов"
+            if too_short
+            else f"единственный маркер '{top_hits[0]}' в коротком тексте"
+        )
+        reasoning = f"Низкая уверенность ({cause}) — требуется проверка оператором."
+        alternatives = build_alternatives(scored, confidence)
     else:
-        readable = ", ".join(f"'{w}'" for w in matched_words[:3])
+        (category, subcategory, service) = scored[0][0]
+        readable = ", ".join(f"'{w}'" for w in top_hits[:3])
         reasoning = f"Категория выбрана на основе маркеров: {readable}"
         confidence = random.randint(85, 97)
+        alternatives = []
 
     priority = _detect_priority(text_lower)
     address = address_hint or _extract_address(text)
@@ -168,4 +253,6 @@ def classify_ticket(text: str, address_hint: str | None = None) -> ClassifyRespo
         responsible_service=service,
         confidence_score=confidence,
         reasoning=reasoning,
+        needs_review=needs_review,
+        alternatives=alternatives,
     )

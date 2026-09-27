@@ -5,7 +5,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import analytics, similar, tickets
+from routes import analytics, exports, similar, tickets
 
 app = FastAPI(
     title="AURA — Pulse 109 API",
@@ -24,6 +24,7 @@ app.add_middleware(
 app.include_router(tickets.router)
 app.include_router(similar.router)
 app.include_router(analytics.router)
+app.include_router(exports.router)
 
 
 @app.get("/")

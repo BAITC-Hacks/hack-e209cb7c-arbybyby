@@ -4,11 +4,23 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from models import ClassifyResponse, Ticket
+from models import ClassifyResponse, CorrectionRequest, Ticket
 from services.classifier import classify_ticket
-from store import all_tickets, get_ticket
+from store import add_correction, all_corrections, all_tickets, get_ticket
 
 router = APIRouter(prefix="/api/tickets", tags=["tickets"])
+
+# Значения по умолчанию при ручной смене категории. Без них правка «ЖКХ ->
+# Освещение» оставляла подкатегорию «Водоснабжение» и службу «Горводоканал» —
+# бессмысленное сочетание, которое видно оператору.
+_CATEGORY_DEFAULTS: dict[str, tuple[str, str]] = {
+    "ЖКХ": ("Общие вопросы", "КСК"),
+    "Дороги": ("Дорожное покрытие", "УДС"),
+    "Освещение": ("Уличное освещение", "Горсвет"),
+    "Транспорт": ("Общественный транспорт", "Управление транспорта"),
+    "Благоустройство": ("Вывоз мусора", "УГХ"),
+    "Другое": ("Общие вопросы", "Акимат района"),
+}
 
 
 def _public(t: dict) -> dict:
@@ -55,6 +67,8 @@ def classify(ticket_id: int):
     t["responsible_service"] = result.responsible_service
     t["confidence_score"] = result.confidence_score
     t["reasoning"] = result.reasoning
+    t["needs_review"] = result.needs_review
+    t["alternatives"] = [a.model_dump() for a in result.alternatives]
     if t["status"] == "new":
         t["status"] = "processing"
 
@@ -69,3 +83,47 @@ def approve(ticket_id: int):
     t["status"] = "resolved"
     t["_resolved_at"] = datetime.now(timezone.utc)
     return _public(t)
+
+
+@router.post("/{ticket_id}/correct", response_model=Ticket)
+def correct(ticket_id: int, payload: CorrectionRequest):
+    """Оператор вручную исправил категорию.
+
+    Правка применяется к обращению и складывается в список коррекций.
+    # TODO: corrections dataset used for model retraining (feedback loop)
+    """
+    t = get_ticket(ticket_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Обращение не найдено")
+
+    original = payload.original_category or t.get("category")
+    t["category"] = payload.corrected_category
+
+    # Категория сменилась — подкатегория и служба от прежней больше не подходят
+    if payload.corrected_category != original:
+        default = _CATEGORY_DEFAULTS.get(payload.corrected_category)
+        if default:
+            t["subcategory"], t["responsible_service"] = default
+    # Правка оператора — источник истины, поэтому уверенность больше не показываем
+    # как машинную: обращение классифицировано человеком.
+    t["confidence_score"] = 100
+    t["needs_review"] = False
+    t["alternatives"] = []
+    t["reasoning"] = f"Категория установлена оператором (было: {original or '—'})."
+
+    add_correction(
+        {
+            "ticket_id": ticket_id,
+            "original_category": original,
+            "corrected_category": payload.corrected_category,
+            "corrected_at": datetime.now(timezone.utc).isoformat(),
+            "text": t["text"],
+        }
+    )
+    return _public(t)
+
+
+@router.get("/corrections/all")
+def corrections():
+    """Накопленные правки операторов — витрина будущей обучающей выборки."""
+    return {"total": len(all_corrections()), "items": all_corrections()}

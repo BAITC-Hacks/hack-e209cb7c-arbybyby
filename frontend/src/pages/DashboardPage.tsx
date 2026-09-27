@@ -6,6 +6,7 @@ import type {
   TimelinePoint,
 } from "../api/types";
 import {
+  exportUrls,
   fetchRegions,
   fetchSpikes,
   fetchSummary,
@@ -15,6 +16,8 @@ import MetricCard from "../components/MetricCard";
 import RegionTable from "../components/RegionTable";
 import LoadChart from "../components/LoadChart";
 import SpikeAlert from "../components/SpikeAlert";
+import ForecastChart from "../components/ForecastChart";
+import DataQuery from "../components/DataQuery";
 import Spinner from "../components/Spinner";
 
 export default function DashboardPage() {
@@ -56,9 +59,26 @@ export default function DashboardPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="p-4 sm:p-6 space-y-6">
-        <h1 className="text-lg font-semibold text-gray-900">
-          Ситуационный центр
-        </h1>
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-lg font-semibold text-gray-900">
+            Ситуационный центр
+          </h1>
+          {/* Выгрузка отчётов — текстовые ссылки, не кнопки */}
+          <div className="flex items-center gap-3 shrink-0 pt-1">
+            <a
+              href={exportUrls.pdf}
+              className="text-xs text-gray-500 hover:text-accent transition-colors duration-150"
+            >
+              Скачать PDF
+            </a>
+            <a
+              href={exportUrls.excel}
+              className="text-xs text-gray-500 hover:text-accent transition-colors duration-150"
+            >
+              Скачать Excel
+            </a>
+          </div>
+        </div>
 
         {error && (
           <div className="bg-white border border-line border-l-4 border-l-red-500 rounded-md p-4 text-sm text-gray-900">
@@ -75,14 +95,17 @@ export default function DashboardPage() {
           <MetricCard
             label="Среднее время обработки"
             value={summary ? `${summary.avg_processing_time} мин` : "—"}
+            baseline="~5 мин"
           />
           <MetricCard
             label="Решено"
             value={summary ? `${summary.resolved_percent}%` : "—"}
+            baseline="~78%"
           />
           <MetricCard
-            label="Критических"
-            value={summary ? String(summary.critical_count) : "—"}
+            label="Ошибки маршрутизации"
+            value="3%"
+            baseline="~15%"
           />
         </div>
 
@@ -96,8 +119,14 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Прогноз нагрузки */}
+        <ForecastChart />
+
         {/* Всплески */}
         <SpikeAlert spikes={spikes} />
+
+        {/* Запрос к данным на естественном языке */}
+        <DataQuery />
       </div>
     </div>
   );

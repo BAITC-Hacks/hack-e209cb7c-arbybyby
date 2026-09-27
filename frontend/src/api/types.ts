@@ -1,8 +1,17 @@
 export type Status = "new" | "processing" | "resolved";
 export type Priority = "high" | "medium" | "low";
 
+export interface CategoryOption {
+  category: string;
+  subcategory: string;
+  responsible_service: string;
+  confidence: number;
+}
+
 export interface Ticket {
   id: number;
+  /** Гражданин обозначается только номером — ФИО в системе нет. */
+  citizen_label?: string | null;
   text: string;
   source: string;
   region: string;
@@ -15,6 +24,8 @@ export interface Ticket {
   responsible_service: string | null;
   confidence_score: number | null;
   reasoning: string | null;
+  needs_review?: boolean;
+  alternatives?: CategoryOption[];
 }
 
 export interface ClassifyResponse {
@@ -25,6 +36,8 @@ export interface ClassifyResponse {
   responsible_service: string;
   confidence_score: number;
   reasoning: string;
+  needs_review: boolean;
+  alternatives: CategoryOption[];
 }
 
 export interface SimilarTicket {
@@ -61,4 +74,38 @@ export interface TimelinePoint {
   ЖКХ: number;
   Дороги: number;
   Освещение: number;
+}
+
+export interface ForecastPoint {
+  date: string;
+  predicted: number;
+  lower: number;
+  upper: number;
+}
+
+export interface ForecastResponse {
+  method: string;
+  months: number;
+  horizon_days: number;
+  history: { date: string; actual: number }[];
+  forecast: ForecastPoint[];
+  summary: {
+    total_predicted: number;
+    avg_per_day_recent: number;
+    avg_per_day_forecast: number;
+    change_percent: number;
+  };
+}
+
+export interface AskResponse {
+  answer: string;
+  detail?: string;
+  filters_applied: {
+    category: string | null;
+    region: string | null;
+    period: string;
+  };
+  data: { label: string; value: number }[];
+  chart?: "line" | "bar";
+  clarification?: string;
 }

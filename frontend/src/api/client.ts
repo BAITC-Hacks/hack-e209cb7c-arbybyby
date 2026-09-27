@@ -1,6 +1,8 @@
 import axios from "axios";
 import type {
   AnalyticsSummary,
+  AskResponse,
+  ForecastResponse,
   ClassifyResponse,
   RegionStats,
   SimilarTicket,
@@ -40,6 +42,24 @@ export async function approveTicket(id: number): Promise<Ticket> {
   return data;
 }
 
+export async function correctTicket(
+  id: number,
+  correctedCategory: string,
+  originalCategory?: string | null
+): Promise<Ticket> {
+  const { data } = await api.post<Ticket>(`/api/tickets/${id}/correct`, {
+    original_category: originalCategory ?? null,
+    corrected_category: correctedCategory,
+  });
+  return data;
+}
+
+/** Ссылки на выгрузку отчётов — браузер качает файл сам. */
+export const exportUrls = {
+  pdf: `${BASE_URL}/api/analytics/export/pdf`,
+  excel: `${BASE_URL}/api/analytics/export/excel`,
+};
+
 export async function fetchSimilar(id: number): Promise<SimilarTicket[]> {
   const { data } = await api.get<SimilarTicket[]>(`/api/tickets/${id}/similar`);
   return data;
@@ -63,5 +83,17 @@ export async function fetchSpikes(): Promise<Spike[]> {
 
 export async function fetchTimeline(): Promise<TimelinePoint[]> {
   const { data } = await api.get<TimelinePoint[]>("/api/analytics/timeline");
+  return data;
+}
+
+export async function fetchForecast(months: number): Promise<ForecastResponse> {
+  const { data } = await api.get<ForecastResponse>("/api/analytics/forecast", {
+    params: { months },
+  });
+  return data;
+}
+
+export async function askData(question: string): Promise<AskResponse> {
+  const { data } = await api.post<AskResponse>("/api/analytics/ask", { question });
   return data;
 }
