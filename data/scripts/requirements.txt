@@ -1,8 +1,22 @@
-# Зависимости только для скриптов сбора данных.
+# Зависимости только для скриптов сбора и подготовки данных.
 # Не пересекается с backend/requirements.txt — ставить в отдельное окружение:
 #   python -m venv .venv-data && .venv-data\Scripts\activate
 #   pip install -r data/scripts/requirements.txt
 
+# Скрейпинг
 requests==2.32.3
 beautifulsoup4==4.12.3
 lxml==5.3.0
+
+# Готовые датасеты
+datasets==5.0.1
+huggingface_hub==1.33.0
+
+# Правила классификации импортируются из backend/services/classifier.py
+pydantic==2.10.4
+
+# Обучение классификатора (SetFit на CPU)
+setfit==1.2.0
+scikit-learn==1.9.1
+matplotlib==3.11.2
+seaborn==0.13.2

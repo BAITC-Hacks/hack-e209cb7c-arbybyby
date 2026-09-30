@@ -24,3 +24,8 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# ML-артефакты: веса не версионируем — 2.3 ГБ, а GitHub режет файлы >100 МБ.
+# Модель воспроизводится из data/scripts/train_setfit.py и датасетов в data/.
+checkpoints/
+data/models/
