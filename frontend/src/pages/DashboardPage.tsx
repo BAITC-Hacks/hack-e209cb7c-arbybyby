@@ -12,13 +12,17 @@ import {
   fetchSummary,
   fetchTimeline,
 } from "../api/client";
+import { CATEGORIES, PERIODS } from "../api/catalog";
 import MetricCard from "../components/MetricCard";
+import FilterSelect from "../components/FilterSelect";
 import RegionTable from "../components/RegionTable";
 import LoadChart from "../components/LoadChart";
 import SpikeAlert from "../components/SpikeAlert";
 import ForecastChart from "../components/ForecastChart";
 import DataQuery from "../components/DataQuery";
 import Spinner from "../components/Spinner";
+
+const DEFAULT_PERIOD = 7;
 
 export default function DashboardPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
@@ -27,25 +31,46 @@ export default function DashboardPage() {
   const [spikes, setSpikes] = useState<Spike[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Фильтры среза: таблица регионов и график нагрузки считаются по ним. */
+  const [period, setPeriod] = useState(DEFAULT_PERIOD);
+  const [category, setCategory] = useState("");
 
+  // Сводка и всплески от фильтров среза не зависят — грузим один раз.
   useEffect(() => {
-    Promise.all([
-      fetchSummary(),
-      fetchRegions(),
-      fetchTimeline(),
-      fetchSpikes(),
-    ])
-      .then(([s, r, t, sp]) => {
+    Promise.all([fetchSummary(), fetchSpikes()])
+      .then(([s, sp]) => {
         setSummary(s);
-        setRegions(r);
-        setTimeline(t);
         setSpikes(sp);
       })
       .catch(() =>
         setError("Не удалось загрузить аналитику. Запущен ли backend на :8000?")
-      )
-      .finally(() => setLoading(false));
+      );
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      fetchRegions(period, category || undefined),
+      fetchTimeline(period, category || undefined),
+    ])
+      .then(([r, t]) => {
+        if (cancelled) return;
+        setRegions(r);
+        setTimeline(t);
+      })
+      .catch(() => {
+        if (!cancelled)
+          setError(
+            "Не удалось загрузить аналитику. Запущен ли backend на :8000?"
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, category]);
 
   if (loading) {
     return (
@@ -109,13 +134,37 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Таблица регионов + график */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
-          <div className="lg:col-span-3">
-            <RegionTable rows={regions} />
+        {/* Срез: период и категория — общие для таблицы и графика */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-end gap-3">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <FilterSelect
+                label="Период"
+                value={String(period)}
+                clearable={false}
+                options={PERIODS.map((p) => ({
+                  value: String(p.value),
+                  label: p.label,
+                }))}
+                onChange={(v) => setPeriod(Number(v))}
+              />
+              <FilterSelect
+                label="Категория"
+                value={category}
+                options={CATEGORIES.map((c) => ({ value: c, label: c }))}
+                onChange={setCategory}
+              />
+            </div>
           </div>
-          <div className="lg:col-span-2">
-            <LoadChart data={timeline} />
+
+          {/* Таблица регионов + график */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">
+            <div className="lg:col-span-3">
+              <RegionTable rows={regions} />
+            </div>
+            <div className="lg:col-span-2">
+              <LoadChart data={timeline} period={period} />
+            </div>
           </div>
         </div>
 

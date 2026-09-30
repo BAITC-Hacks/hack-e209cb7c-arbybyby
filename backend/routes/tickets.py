@@ -28,16 +28,45 @@ def _public(t: dict) -> dict:
     return {k: v for k, v in t.items() if not k.startswith("_")}
 
 
+def _effective_category(t: dict) -> Optional[str]:
+    """Категория обращения для фильтрации.
+
+    У необработанных обращений поле category пустое — оно заполняется только
+    после классификации. Если фильтровать строго по нему, выбор «ЖКХ» покажет
+    лишь те обращения, которые оператор уже открывал, а очередь входящих
+    окажется пустой. Поэтому подставляем эталонную категорию (_gold) —
+    в проде её роль играет предварительная классификация на приёме.
+    """
+    return t.get("category") or (t.get("_gold") or {}).get("category")
+
+
 @router.get("", response_model=list[Ticket])
 def list_tickets(
-    region: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    region: Optional[str] = Query(None, description="Регион, например «Астана»"),
+    status: Optional[str] = Query(None, description="new | processing | resolved"),
+    category: Optional[str] = Query(None, description="Категория, например «ЖКХ»"),
+    priority: Optional[str] = Query(None, description="high | medium | low"),
+    q: Optional[str] = Query(None, description="Поиск по тексту обращения"),
 ):
     items = all_tickets()
     if region:
         items = [t for t in items if t["region"] == region]
     if status:
         items = [t for t in items if t["status"] == status]
+    if category:
+        items = [t for t in items if _effective_category(t) == category]
+    if priority:
+        items = [t for t in items if t["priority"] == priority]
+    if q:
+        needle = q.strip().casefold()
+        if needle:
+            # Поиск по тексту обращения и по адресу — оператор ищет и «труба», и «Кенесары».
+            items = [
+                t
+                for t in items
+                if needle in t["text"].casefold()
+                or needle in (t.get("address") or "").casefold()
+            ]
     # свежие сверху
     items = sorted(items, key=lambda t: t["created_at"], reverse=True)
     return [_public(t) for t in items]

@@ -49,8 +49,19 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Справа: пользователь + гамбургер на мобильных */}
+        {/* Справа: состояние системы, пользователь, гамбургер на мобильных */}
         <div className="flex items-center gap-3">
+          {/* Индикатор работоспособности — привычный для дежурных смен маркер */}
+          <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-gray-400">
+            <span
+              className="h-1.5 w-1.5 rounded-full bg-green-500"
+              aria-hidden="true"
+            />
+            Система работает
+          </span>
+          <span className="hidden sm:inline text-gray-200" aria-hidden="true">
+            |
+          </span>
           <span className="hidden sm:inline text-xs text-gray-400">
             arbybyby
           </span>

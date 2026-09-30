@@ -69,11 +69,19 @@ export interface Spike {
   time_window: string;
 }
 
-export interface TimelinePoint {
-  day: string;
-  ЖКХ: number;
-  Дороги: number;
-  Освещение: number;
+/**
+ * Точка графика нагрузки. Набор серий задаёт бэкенд: без фильтра — три
+ * массовые категории, с фильтром — одна, поэтому ключи динамические.
+ */
+export type TimelinePoint = { day: string } & Record<string, number | string>;
+
+/** Фильтры списка обращений на рабочем месте оператора. */
+export interface TicketFilters {
+  region: string;
+  category: string;
+  priority: string;
+  status: string;
+  q: string;
 }
 
 export interface ForecastPoint {

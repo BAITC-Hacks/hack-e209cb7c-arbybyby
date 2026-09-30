@@ -22,8 +22,15 @@ export const api = axios.create({
 export async function fetchTickets(params?: {
   region?: string;
   status?: string;
+  category?: string;
+  priority?: string;
+  q?: string;
 }): Promise<Ticket[]> {
-  const { data } = await api.get<Ticket[]>("/api/tickets", { params });
+  // Пустые значения не отправляем — «Все» в дропдауне означает отсутствие фильтра.
+  const query = Object.fromEntries(
+    Object.entries(params ?? {}).filter(([, v]) => v)
+  );
+  const { data } = await api.get<Ticket[]>("/api/tickets", { params: query });
   return data;
 }
 
@@ -71,8 +78,13 @@ export async function fetchSummary(): Promise<AnalyticsSummary> {
   return data;
 }
 
-export async function fetchRegions(): Promise<RegionStats[]> {
-  const { data } = await api.get<RegionStats[]>("/api/analytics/regions");
+export async function fetchRegions(
+  period: number,
+  category?: string
+): Promise<RegionStats[]> {
+  const { data } = await api.get<RegionStats[]>("/api/analytics/regions", {
+    params: { period, ...(category ? { category } : {}) },
+  });
   return data;
 }
 
@@ -81,8 +93,13 @@ export async function fetchSpikes(): Promise<Spike[]> {
   return data;
 }
 
-export async function fetchTimeline(): Promise<TimelinePoint[]> {
-  const { data } = await api.get<TimelinePoint[]>("/api/analytics/timeline");
+export async function fetchTimeline(
+  period: number,
+  category?: string
+): Promise<TimelinePoint[]> {
+  const { data } = await api.get<TimelinePoint[]>("/api/analytics/timeline", {
+    params: { period, ...(category ? { category } : {}) },
+  });
   return data;
 }
 

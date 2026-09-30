@@ -91,12 +91,5 @@ class AnalyticsSummary(BaseModel):
     critical_count: int
 
 
-class TimelinePoint(BaseModel):
-    day: str
-    ЖКХ: int
-    Дороги: int
-    Освещение: int
-
-
 # CategoryOption объявлен ниже Ticket, поэтому ссылку в Ticket разрешаем явно.
 Ticket.model_rebuild()

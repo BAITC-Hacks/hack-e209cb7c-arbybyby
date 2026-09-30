@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from routes.analytics import regions, spikes, summary
+from routes.analytics import DEFAULT_PERIOD, regions, spikes, summary
 from store import all_tickets
 
 router = APIRouter(prefix="/api/analytics/export", tags=["export"])
@@ -67,7 +67,9 @@ def export_pdf():
 
     font = _register_cyrillic_font()
     summary_data = summary()
-    region_rows = regions()
+    # Аргументы передаём явно: у роутов дефолты — объекты Query, годные
+    # только для FastAPI, при прямом вызове из кода они не разворачиваются.
+    region_rows = regions(period=DEFAULT_PERIOD, category=None)
     spike_rows = spikes()
 
     buffer = io.BytesIO()
@@ -179,7 +181,9 @@ def export_excel():
     from openpyxl.utils import get_column_letter
 
     summary_data = summary()
-    region_rows = regions()
+    # Аргументы передаём явно: у роутов дефолты — объекты Query, годные
+    # только для FastAPI, при прямом вызове из кода они не разворачиваются.
+    region_rows = regions(period=DEFAULT_PERIOD, category=None)
     spike_rows = spikes()
     tickets = all_tickets()
 

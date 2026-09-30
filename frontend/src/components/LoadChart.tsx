@@ -11,18 +11,24 @@ import {
 import type { TimelinePoint } from "../api/types";
 
 /** Серо-синяя палитра: один акцент + нейтральные тона. */
-const SERIES = [
-  { key: "ЖКХ", color: "#2563EB" },
-  { key: "Дороги", color: "#6B7280" },
-  { key: "Освещение", color: "#9CA3AF" },
-] as const;
+const PALETTE = ["#2563EB", "#6B7280", "#9CA3AF"];
 
 const AXIS_TICK = { fill: "#9CA3AF", fontSize: 12 };
 
-export default function LoadChart({ data }: { data: TimelinePoint[] }) {
+interface Props {
+  data: TimelinePoint[];
+  /** Окно в днях — только для заголовка. */
+  period: number;
+}
+
+export default function LoadChart({ data, period }: Props) {
+  // Набор категорий задаёт бэкенд (все массовые или одна выбранная),
+  // поэтому серии выводим из самих данных, а не из константы.
+  const series = Object.keys(data[0] ?? {}).filter((key) => key !== "day");
+
   return (
     <div className="bg-white border border-line rounded-md p-4 h-full flex flex-col">
-      <h2 className="section-label mb-4">Нагрузка за 7 дней</h2>
+      <h2 className="section-label mb-4">Нагрузка за {period} дней</h2>
 
       {data.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-12">Нет данных</p>
@@ -39,6 +45,7 @@ export default function LoadChart({ data }: { data: TimelinePoint[] }) {
                 tick={AXIS_TICK}
                 tickLine={false}
                 axisLine={{ stroke: "#E5E7EB" }}
+                minTickGap={16}
               />
               <YAxis
                 tick={AXIS_TICK}
@@ -63,12 +70,12 @@ export default function LoadChart({ data }: { data: TimelinePoint[] }) {
                 iconType="plainline"
                 wrapperStyle={{ fontSize: 12, color: "#6B7280" }}
               />
-              {SERIES.map((s) => (
+              {series.map((name, i) => (
                 <Line
-                  key={s.key}
+                  key={name}
                   type="monotone"
-                  dataKey={s.key}
-                  stroke={s.color}
+                  dataKey={name}
+                  stroke={PALETTE[i % PALETTE.length]}
                   strokeWidth={1.5}
                   dot={false}
                   activeDot={{ r: 3, strokeWidth: 0 }}

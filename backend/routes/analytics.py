@@ -1,9 +1,12 @@
 """Аналитические роуты для ситуационного центра."""
 from collections import Counter, defaultdict
+from datetime import date, timedelta
+from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
-from models import AnalyticsSummary, AskRequest, RegionStats, Spike, TimelinePoint
+from data.history import HISTORY, TODAY
+from models import AnalyticsSummary, AskRequest, RegionStats, Spike
 from services.anomaly import get_spikes
 from services.forecast import build_forecast
 from services.nlq import answer as answer_question
@@ -11,9 +14,42 @@ from store import all_tickets
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
+# Периоды, которые предлагает интерфейс. Произвольное число дней не принимаем:
+# окно должно укладываться в глубину истории.
+_PERIODS = (7, 30, 90)
+DEFAULT_PERIOD = 7
 
-def _category_of(t: dict) -> str:
-    return t.get("category") or (t.get("_gold") or {}).get("category") or "Другое"
+# Самый ранний день в истории — дальше сравнивать не с чем.
+_FIRST_DAY = min(row["date"] for row in HISTORY)
+
+# Категории графика нагрузки по умолчанию — три самых массовых.
+# При фильтре по категории рисуем одну линию.
+_TIMELINE_CATEGORIES = ("ЖКХ", "Дороги", "Освещение")
+
+_WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+
+
+def _period_days(period: int) -> int:
+    return period if period in _PERIODS else DEFAULT_PERIOD
+
+
+def _window(days: int) -> tuple[date, date, int]:
+    """Начало окна, начало предыдущего окна и его реальная длина в днях.
+
+    На 90 днях предыдущее окно частично выходит за глубину истории: данных
+    там 30 дней вместо 90, и сравнение сумм показало бы трёхкратный «рост»
+    во всех регионах. Поэтому возвращаем ещё и покрытую длину — тренд
+    считается по средним за день.
+    """
+    start = TODAY - timedelta(days=days - 1)
+    prev_start = start - timedelta(days=days)
+    covered = max((start - max(prev_start, _FIRST_DAY)).days, 0)
+    return start, prev_start, covered
+
+
+def _day_label(day: date, days: int) -> str:
+    """Неделя читается по дням недели, длинные периоды — по датам."""
+    return _WEEKDAYS[day.weekday()] if days <= 7 else day.strftime("%d.%m")
 
 
 @router.get("/summary", response_model=AnalyticsSummary)
@@ -32,32 +68,47 @@ def summary():
 
 
 @router.get("/regions", response_model=list[RegionStats])
-def regions():
-    tickets = all_tickets()
-    by_region: dict[str, list[dict]] = defaultdict(list)
-    for t in tickets:
-        by_region[t["region"]].append(t)
+def regions(
+    period: int = Query(DEFAULT_PERIOD, description="Окно в днях: 7, 30 или 90"),
+    category: Optional[str] = Query(None, description="Категория, например «ЖКХ»"),
+):
+    """Статистика по регионам за выбранное окно.
 
-    # предопределённые тренды для демо-наглядности
-    trend_map = {
-        "Астана": 12.4,
-        "Алматы": -3.1,
-        "Шымкент": 8.7,
-        "Караганда": 21.5,
-        "Павлодар": -5.2,
-        "Актобе": 4.0,
-    }
+    Считается по агрегированной истории, а не по 55 seed-обращениям: без
+    временного ряда фильтр «7 / 30 / 90 дней» не на чем применять. Тренд —
+    честное сравнение окна с предыдущим окном такой же длины, а не константа.
+    """
+    days = _period_days(period)
+    start, prev_start, prev_days = _window(days)
+
+    current: dict[str, Counter] = defaultdict(Counter)  # регион -> категории
+    previous: Counter = Counter()  # регион -> всего за прошлое окно
+
+    for row in HISTORY:
+        if category and row["category"] != category:
+            continue
+        day = row["date"]
+        if day >= start:
+            current[row["region"]][row["category"]] += row["count"]
+        elif day >= prev_start:
+            previous[row["region"]] += row["count"]
 
     stats: list[RegionStats] = []
-    for region, items in by_region.items():
-        cats = Counter(_category_of(t) for t in items)
-        top_category = cats.most_common(1)[0][0] if cats else "—"
+    for region, cats in current.items():
+        total = sum(cats.values())
+        was = previous.get(region, 0)
+        # Сравниваем интенсивность (обращений в день), а не сырые суммы.
+        if was and prev_days:
+            before = was / prev_days
+            trend = round((total / days - before) / before * 100, 1)
+        else:
+            trend = 0.0
         stats.append(
             RegionStats(
                 region=region,
-                total=len(items),
-                top_category=top_category,
-                trend_percent=trend_map.get(region, 0.0),
+                total=total,
+                top_category=cats.most_common(1)[0][0] if cats else "—",
+                trend_percent=trend,
             )
         )
     stats.sort(key=lambda s: s.total, reverse=True)
@@ -69,16 +120,31 @@ def spikes():
     return get_spikes()
 
 
-@router.get("/timeline", response_model=list[TimelinePoint])
-def timeline():
-    # Демо-данные за 7 дней по трём ключевым категориям.
-    days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-    zhkh = [320, 410, 380, 520, 610, 470, 390]
-    roads = [140, 160, 210, 180, 240, 200, 170]
-    light = [80, 95, 110, 130, 120, 90, 100]
+@router.get("/timeline")
+def timeline(
+    period: int = Query(DEFAULT_PERIOD, description="Окно в днях: 7, 30 или 90"),
+    category: Optional[str] = Query(None, description="Категория, например «ЖКХ»"),
+) -> list[dict]:
+    """Нагрузка по дням: [{"day": "Пн", "ЖКХ": 12, ...}].
+
+    Набор серий зависит от фильтра (одна категория или три массовых), поэтому
+    схема ответа динамическая — фиксированная модель здесь только мешала бы.
+    """
+    days = _period_days(period)
+    start, _, _ = _window(days)
+    series = (category,) if category else _TIMELINE_CATEGORIES
+
+    buckets: dict[date, Counter] = {
+        start + timedelta(days=i): Counter() for i in range(days)
+    }
+    for row in HISTORY:
+        if row["date"] < start or row["category"] not in series:
+            continue
+        buckets[row["date"]][row["category"]] += row["count"]
+
     return [
-        TimelinePoint(day=d, ЖКХ=z, Дороги=r, Освещение=l)
-        for d, z, r, l in zip(days, zhkh, roads, light)
+        {"day": _day_label(day, days), **{name: counts[name] for name in series}}
+        for day, counts in sorted(buckets.items())
     ]
 
 

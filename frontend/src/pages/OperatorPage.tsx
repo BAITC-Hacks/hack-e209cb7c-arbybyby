@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import type { Ticket } from "../api/types";
+import { InboxIcon } from "@heroicons/react/24/outline";
+import type { Ticket, TicketFilters as Filters } from "../api/types";
 import { fetchTickets } from "../api/client";
 import TicketCard from "../components/TicketCard";
+import TicketFilters, { EMPTY_FILTERS } from "../components/TicketFilters";
 import AIWorkspace from "../components/AIWorkspace";
 import Spinner from "../components/Spinner";
 
@@ -12,22 +14,49 @@ export default function OperatorPage() {
   const [error, setError] = useState<string | null>(null);
   /** На узких экранах панели переключаются: список ↔ карточка обращения. */
   const [mobileDetail, setMobileDetail] = useState(false);
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  /** Фильтры, уже ушедшие в запрос: ввод в поиске не должен дёргать API на каждую букву. */
+  const [applied, setApplied] = useState<Filters>(EMPTY_FILTERS);
 
   useEffect(() => {
-    fetchTickets()
+    // На первом рендере filters — тот же объект EMPTY_FILTERS, что и applied,
+    // поэтому setApplied ничего не меняет и лишнего запроса не будет.
+    const id = setTimeout(() => setApplied(filters), 250);
+    return () => clearTimeout(id);
+  }, [filters]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTickets(applied)
       .then((data) => {
+        if (cancelled) return;
+        setError(null);
         setTickets(data);
-        if (data.length) setSelectedId(data[0].id);
+        // Выбранное обращение могло выпасть из выборки — тогда берём первое.
+        setSelectedId((prev) =>
+          prev !== null && data.some((t) => t.id === prev)
+            ? prev
+            : data[0]?.id ?? null
+        );
       })
-      .catch(() =>
-        setError("Не удалось загрузить обращения. Запущен ли backend на :8000?")
-      )
-      .finally(() => setLoading(false));
-  }, []);
+      .catch(() => {
+        if (!cancelled)
+          setError(
+            "Не удалось загрузить обращения. Запущен ли backend на :8000?"
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applied]);
 
   const selected = tickets.find((t) => t.id === selectedId) || null;
   const incoming = tickets.filter((t) => t.status === "new").length;
   const inProgress = tickets.filter((t) => t.status === "processing").length;
+  const filtered = Object.values(applied).some((v) => v !== "");
 
   const handleResolved = (updated: Ticket) => {
     setTickets((prev) =>
@@ -48,7 +77,7 @@ export default function OperatorPage() {
           mobileDetail ? "hidden lg:flex" : "flex"
         }`}
       >
-        <div className="px-4 py-3 border-b border-line shrink-0">
+        <div className="px-4 py-3 border-b border-line shrink-0 space-y-2.5">
           <div className="text-xs text-gray-500">
             Входящие:{" "}
             <span className="text-gray-900 font-medium tabular-nums">
@@ -60,6 +89,7 @@ export default function OperatorPage() {
               {inProgress}
             </span>
           </div>
+          <TicketFilters value={filters} onChange={setFilters} />
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -78,7 +108,7 @@ export default function OperatorPage() {
 
           {!loading && !error && tickets.length === 0 && (
             <p className="text-sm text-gray-400 text-center py-10">
-              Нет обращений
+              {filtered ? "Ничего не найдено" : "Нет обращений"}
             </p>
           )}
 
@@ -105,9 +135,10 @@ export default function OperatorPage() {
             onBack={() => setMobileDetail(false)}
           />
         ) : (
-          <div className="h-full flex items-center justify-center">
+          <div className="h-full flex flex-col items-center justify-center gap-3">
+            <InboxIcon className="h-12 w-12 text-gray-300" />
             <p className="text-sm text-gray-400">
-              {loading ? "Загрузка…" : "Выберите обращение слева"}
+              {loading ? "Загрузка…" : "Выберите обращение из списка"}
             </p>
           </div>
         )}
